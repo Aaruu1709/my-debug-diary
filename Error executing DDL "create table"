@@ -1,0 +1,316 @@
+# Error: Table Not Created After Adding @CreationTimestamp and @UpdateTimestamp
+
+## Scenario
+
+I had a Spring Boot + JPA + Hibernate project.
+
+Initially my entity looked like this:
+
+```java
+private LocalDateTime createOn;
+
+private LocalDateTime updateOn;
+```
+
+Application started successfully and table was created.
+
+Then I added automatic timestamp annotations:
+
+```java
+@CreationTimestamp
+private LocalDateTime createOn;
+
+@UpdateTimestamp
+private LocalDateTime updateOn;
+```
+
+After this, table creation failed.
+
+---
+
+# Error Message
+
+```text
+Error executing DDL
+
+create table posts(
+ create_on datetime(6),
+ update_on datetime(6)
+)
+
+SQL syntax error near '(6)'
+```
+
+---
+
+# What I Thought Initially
+
+I thought:
+
+```text
+@CreationTimestamp is wrong
+OR
+@UpdateTimestamp is wrong
+```
+
+But that was NOT the actual problem.
+
+---
+
+# Actual Root Cause
+
+To understand this, first see what these annotations do.
+
+## Step 1 — What @CreationTimestamp does
+
+```java
+@CreationTimestamp
+private LocalDateTime createOn;
+```
+
+Meaning:
+
+```text
+When INSERT happens
+Hibernate automatically stores current timestamp
+```
+
+Example:
+
+Before save:
+
+```text
+title = Java
+createOn = null
+```
+
+After save:
+
+```text
+title = Java
+createOn = 2026-06-19 15:30
+```
+
+No manual setting required.
+
+---
+
+## Step 2 — What @UpdateTimestamp does
+
+```java
+@UpdateTimestamp
+private LocalDateTime updateOn;
+```
+
+Meaning:
+
+```text
+Whenever UPDATE happens
+Hibernate automatically changes update time
+```
+
+Example:
+
+Before update:
+
+```text
+updateOn = 15:30
+```
+
+After update:
+
+```text
+updateOn = 15:45
+```
+
+---
+
+# Where the Actual Problem Happened
+
+My field type was:
+
+```java
+LocalDateTime
+```
+
+Hibernate saw:
+
+```text
+LocalDateTime
+```
+
+and internally converted it into SQL type:
+
+```sql
+datetime(6)
+```
+
+Generated SQL:
+
+```sql
+create table posts(
+ create_on datetime(6),
+ update_on datetime(6)
+)
+```
+
+---
+
+# What is datetime(6)?
+
+```text
+DATETIME
++
+microseconds precision
+```
+
+Example:
+
+Normal DATETIME:
+
+```text
+2026-06-19 15:30:10
+```
+
+datetime(6):
+
+```text
+2026-06-19 15:30:10.123456
+```
+
+That `(6)` stores extra precision.
+
+---
+
+# Why Table Creation Failed
+
+My database version/configuration did not support:
+
+```sql
+datetime(6)
+```
+
+So database rejected SQL.
+
+Flow:
+
+```text
+Entity
+↓
+Hibernate generated SQL
+↓
+Database rejected datetime(6)
+↓
+DDL failed
+↓
+Table not created
+```
+
+---
+
+# Solution 1 (Worked for Me)
+
+Force Hibernate to use normal DATETIME.
+
+```java
+@CreationTimestamp
+@Column(columnDefinition="DATETIME")
+private LocalDateTime createOn;
+
+@UpdateTimestamp
+@Column(columnDefinition="DATETIME")
+private LocalDateTime updateOn;
+```
+
+---
+
+# What This Fix Actually Does
+
+Before:
+
+```text
+Hibernate:
+I will choose datatype
+
+Result:
+datetime(6)
+```
+
+After:
+
+```text
+Developer:
+Use DATETIME only
+
+Result:
+DATETIME
+```
+
+Generated SQL:
+
+```sql
+create_on DATETIME
+update_on DATETIME
+```
+
+Table created successfully.
+
+---
+
+# Solution 2 (Advanced / Modern Database)
+
+If database supports datetime precision:
+
+```java
+@CreationTimestamp
+private LocalDateTime createOn;
+
+@UpdateTimestamp
+private LocalDateTime updateOn;
+```
+
+No extra annotation needed.
+
+---
+
+# Solution 3 (Dialect Configuration)
+
+application.properties
+
+```properties
+spring.jpa.database-platform=org.hibernate.dialect.MySQLDialect
+```
+
+Meaning:
+
+```text
+Tell Hibernate:
+Generate SQL suitable for MySQL
+```
+
+---
+
+# Final Learning
+
+The problem was NOT:
+
+```text
+@CreationTimestamp
+@UpdateTimestamp
+```
+
+The actual issue was:
+
+```text
+Hibernate generated SQL datatype
+≠
+Database supported datatype
+```
+
+Always check generated SQL logs.
+
+---
+
+# Interview Explanation
+
+“I faced table creation failure after adding audit timestamp annotations. Hibernate converted LocalDateTime into datetime(6), but my database configuration did not support that precision. I fixed it by controlling SQL datatype generation using @Column(columnDefinition='DATETIME') and proper Hibernate configuration.”
