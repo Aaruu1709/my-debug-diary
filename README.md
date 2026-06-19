@@ -35,3 +35,100 @@ Additionally, I used validation annotations such as @NotNull and handled excepti
 From this issue I learned that request validation and correct datatype selection are important while designing APIs.
 
 ---
+
+# Error Log Repository
+
+## 1. Error Name
+
+### Error:
+
+org.springframework.http.converter.HttpMessageNotReadableException:
+
+JSON parse error:
+
+Cannot map `null` into type `int`
+(set `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to false to allow)
+
+---
+
+### Why it happened:
+
+This error occurred because Spring Boot was trying to convert incoming JSON data into a Java object (deserialization process).
+
+One field in the request body was either:
+
+* missing, or
+* sent as null
+
+But inside the entity the field datatype was declared as primitive `int`.
+
+Example:
+
+private int trainNumber;
+
+Primitive datatypes cannot store null values, so Spring failed before entering the service layer.
+
+Example request causing error:
+
+{
+"trainNumber": null,
+"trainName": "Rajdhani"
+}
+
+---
+
+### How I debugged:
+
+Step 1:
+Checked the complete exception stack trace in console logs.
+
+Step 2:
+Identified that exception occurred during JSON parsing before controller execution.
+
+Step 3:
+Verified request payload in Postman.
+
+Step 4:
+Compared JSON fields with entity datatypes.
+
+Step 5:
+Found that trainNumber was missing or null while entity expected primitive int.
+
+Step 6:
+Updated request and datatype accordingly.
+
+---
+
+### Solution:
+
+Option 1 — Send valid request
+
+{
+"trainNumber": 101,
+"trainName": "Rajdhani Express"
+}
+
+OR
+
+Option 2 — Change datatype
+
+Before:
+
+private int trainNumber;
+
+After:
+
+private Integer trainNumber;
+
+Optional:
+Add validation.
+
+@NotNull
+private Integer trainNumber;
+
+---
+
+### Interview Answer:
+
+"While building an IRCTC train booking project using Spring Boot, I encountered HttpMessageNotReadableException. The issue happened because a request field was coming as null, but my entity used primitive int which cannot accept null values. I debugged the issue by checking logs, validating the Postman payload, and tracing request mapping. I resolved it by correcting the JSON request and replacing primitive types with wrapper classes where null values were expected. I also added validation to prevent similar issues."
+---
