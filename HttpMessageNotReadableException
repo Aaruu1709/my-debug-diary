@@ -7,7 +7,6 @@ Collection of real project errors, debugging steps, root causes, and solutions d
 This happened when I was sending request data from Postman to my REST API. One field in JSON either had a null value or was missing completely, but in my entity that field was declared as primitive int.
 
 For example:
-
 private int trainNumber;
 
 If the request body sends:
